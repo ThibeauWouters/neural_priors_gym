@@ -9,6 +9,7 @@ from .masses import (
 )
 from .lambdas import LambdaConfig
 from .flow import FlowConfig, GlasflowConfig
+from .spin import SpinConfig
 from .training import TrainingHyperparamsConfig
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "LambdaConfig",
     "FlowConfig",
     "GlasflowConfig",
+    "SpinConfig",
     "TrainingHyperparamsConfig",
 ]

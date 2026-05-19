@@ -17,6 +17,7 @@ from neural_priors_gym.config.schemas.masses import (
     GaussianMassConfig,
     UniformMassConfig,
 )
+from neural_priors_gym.config.schemas.spin import SpinConfig
 from neural_priors_gym.data.lambdas.interpolator import EOSLambdaInterpolator
 from neural_priors_gym.data.masses.base import MassGenerator
 from neural_priors_gym.data.masses.bilby_prior import BilbyPriorMassGenerator
@@ -101,6 +102,9 @@ class TrainingDataGenerator:
     source_type:
         ``"bns"`` or ``"nsbh"``. For NSBH, only m2 (the NS) is passed to the
         lambda interpolator; m1 (the BH) has no tidal deformability.
+    spin_config:
+        Optional spin prior.  When set, masses are generated via the
+        spin-aware path and the spin parameter is included in the output.
     """
 
     def __init__(
@@ -109,11 +113,13 @@ class TrainingDataGenerator:
         lambda_interpolator: EOSLambdaInterpolator,
         n_samples: int,
         source_type: str = "bns",
+        spin_config: SpinConfig | None = None,
     ) -> None:
         self.mass_generator = mass_generator
         self.lambda_interpolator = lambda_interpolator
         self.n_samples = n_samples
         self.source_type = source_type
+        self.spin_config = spin_config
 
     @classmethod
     def from_config(cls, config: TrainingConfig) -> "TrainingDataGenerator":
@@ -131,14 +137,15 @@ class TrainingDataGenerator:
             lambda_interpolator=lambda_interp,
             n_samples=config.training.n_samples,
             source_type=config.source_type,
+            spin_config=config.spin,
         )
 
     def generate(self) -> dict[str, np.ndarray]:
         """Generate the full training dataset.
 
-        Always returns all computable mass and lambda quantities. The caller
-        selects which columns to use for training via
-        ``training.parameter_names``.
+        Always returns all computable mass and lambda quantities plus, when a
+        spin config is set, the spin parameter.  The caller selects which
+        columns to use for training via ``training.parameter_names``.
 
         For NSBH sources, only mass_2_source (the NS) is passed to the lambda
         interpolator. mass_1_source (BH) gets lambda_1=0, so lambda_tilde and
@@ -150,13 +157,27 @@ class TrainingDataGenerator:
             All supported quantities as 1-D arrays of length ``n_samples``:
             ``mass_1_source``, ``mass_2_source``, ``chirp_mass_source``,
             ``mass_ratio``, ``lambda_1``, ``lambda_2``, ``lambda_tilde``,
-            ``delta_lambda_tilde``.
+            ``delta_lambda_tilde``, and optionally ``a_1`` or ``a_2``.
         """
         logger.info(f"Generating {self.n_samples} training samples ...")
 
-        masses = self.mass_generator.generate(
-            self.n_samples, self.lambda_interpolator.mtov_array
-        )
+        mtov_array = self.lambda_interpolator.mtov_array
+
+        if self.spin_config is not None:
+            rtov_array = self.lambda_interpolator.rtov_array
+            if rtov_array is None:
+                raise ValueError(
+                    "Spin generation requires 'radii_EOS' in the EOS data source. "
+                    "Use 'jester_path' or regenerate the npz with jester_hdf5_to_npz "
+                    "so that 'radii_EOS' is included."
+                )
+            masses, spins = self.mass_generator.generate_with_spin(
+                self.n_samples, mtov_array, rtov_array, self.spin_config
+            )
+        else:
+            masses = self.mass_generator.generate(self.n_samples, mtov_array)
+            spins = None
+
         mass_1_source, mass_2_source = masses[:, 0], masses[:, 1]
 
         mass_quantities = _build_mass_quantities(mass_1_source, mass_2_source)
@@ -182,6 +203,10 @@ class TrainingDataGenerator:
             )
 
         data = {**mass_quantities, **lambda_quantities}
+
+        if spins is not None:
+            data[self.spin_config.parameter_name] = spins  # type: ignore[union-attr]
+
         logger.info("Training data generation complete.")
         return data
 

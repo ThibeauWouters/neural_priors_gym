@@ -14,6 +14,7 @@ from .schemas.masses import (
     MassConfig,
     UniformMassConfig,
 )
+from .schemas.spin import SpinConfig
 from .schemas.training import TrainingHyperparamsConfig
 
 
@@ -40,6 +41,14 @@ class TrainingConfig(NeuralPriorBaseModel):
     lambdas:
         Configuration for the tidal deformability generator. Must be provided
         together with ``masses`` unless ``training.data_path`` is set.
+    spin:
+        Optional uniform prior on the spin magnitude of one neutron star.
+        When set, the maximum mass is spin-corrected and the spin is included
+        as a training parameter.  Requires ``radii_EOS`` to be available in
+        the EOS data source (always present for ``jester_path``; must be
+        included in the ``eos_path`` npz archive when using that option).
+        For ``source_type="bns"``, only ``parameter_name="a_1"`` is supported.
+        For ``source_type="nsbh"``, only ``parameter_name="a_2"`` is supported.
     flow:
         Configuration for the normalizing flow backend and architecture.
     training:
@@ -54,6 +63,7 @@ class TrainingConfig(NeuralPriorBaseModel):
     generate_only: bool = False
     masses: MassConfig | None = None
     lambdas: LambdaConfig | None = None
+    spin: SpinConfig | None = None
     flow: FlowConfig
     training: TrainingHyperparamsConfig
 
@@ -78,6 +88,17 @@ class TrainingConfig(NeuralPriorBaseModel):
                 "Provide either ('masses' + 'lambdas') or 'training.data_path', "
                 "not both."
             )
+        if self.spin is not None:
+            if self.source_type == "bns" and self.spin.parameter_name != "a_1":
+                raise ValueError(
+                    "For BNS sources, only spin.parameter_name='a_1' is supported. "
+                    "Spinning mass_2 with mass ordering is currently not implemented."
+                )
+            if self.source_type == "nsbh" and self.spin.parameter_name != "a_2":
+                raise ValueError(
+                    "For NSBH sources, only spin.parameter_name='a_2' is supported "
+                    "(the black hole spin is not modelled here)."
+                )
         return self
 
 
@@ -91,6 +112,7 @@ __all__ = [
     "LambdaConfig",
     "FlowConfig",
     "GlasflowConfig",
+    "SpinConfig",
     "TrainingHyperparamsConfig",
     "NeuralPriorBaseModel",
 ]

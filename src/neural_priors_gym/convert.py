@@ -12,9 +12,10 @@ from jesterTOV.inference.result import InferenceResult
 def convert(input_path: Path, output_path: Path) -> None:
     """Convert a jester HDF5 result file to an EOS npz file.
 
-    Extracts ``masses_EOS`` and ``Lambdas_EOS`` arrays from the posterior and
-    saves them as a NumPy archive. The output is a lightweight file suitable for
-    use with :class:`~neural_priors_gym.data.lambdas.interpolator.EOSLambdaInterpolator`.
+    Extracts ``masses_EOS``, ``Lambdas_EOS``, and ``radii_EOS`` (when
+    available) from the posterior and saves them as a NumPy archive.
+    Including ``radii_EOS`` enables spin-aware mass generation via the
+    ``spin`` config option.
 
     Args:
         input_path: Path to the jester ``results.h5`` file.
@@ -27,8 +28,33 @@ def convert(input_path: Path, output_path: Path) -> None:
     masses_EOS: np.ndarray = posterior["masses_EOS"]
     Lambdas_EOS: np.ndarray = posterior["Lambdas_EOS"]
 
+    arrays: dict[str, np.ndarray] = {
+        "masses_EOS": masses_EOS,
+        "Lambdas_EOS": Lambdas_EOS,
+    }
+
+    if "radii_EOS" in posterior:
+        arrays["radii_EOS"] = posterior["radii_EOS"]
+        print("Including radii_EOS (enables spin-aware mass generation).")
+    else:
+        print(
+            "No radii_EOS found in posterior — spin correction will not be available."
+        )
+
     print(f"Found {len(masses_EOS)} EOS samples.")
-    np.savez(output_path, masses_EOS=masses_EOS, Lambdas_EOS=Lambdas_EOS)
+    if "radii_EOS" in arrays:
+        np.savez(
+            output_path,
+            masses_EOS=arrays["masses_EOS"],
+            Lambdas_EOS=arrays["Lambdas_EOS"],
+            radii_EOS=arrays["radii_EOS"],
+        )
+    else:
+        np.savez(
+            output_path,
+            masses_EOS=arrays["masses_EOS"],
+            Lambdas_EOS=arrays["Lambdas_EOS"],
+        )
     print(f"Saved to {output_path}")
 
 

@@ -13,15 +13,26 @@ logger = get_logger("neural_priors_gym.data.lambdas")
 LAMBDA_CLIP_MIN = 1e-4
 
 
-def _load_eos_arrays(config: LambdaConfig) -> tuple[np.ndarray, np.ndarray]:
-    """Return (masses_EOS, Lambdas_EOS) from either an npz or jester HDF5 file."""
+def _load_eos_arrays(
+    config: LambdaConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """Return ``(masses_EOS, Lambdas_EOS, radii_EOS)`` from npz or jester HDF5.
+
+    ``radii_EOS`` is ``None`` when the source does not contain radii.
+    """
     if config.eos_path is not None:
         path = Path(config.eos_path)
         if not path.exists():
             raise FileNotFoundError(f"EOS npz file not found: {path}")
         logger.info(f"Loading EOS samples from npz: {path}")
         data = np.load(path)
-        return data["masses_EOS"], data["Lambdas_EOS"]
+        radii = data["radii_EOS"] if "radii_EOS" in data else None
+        if radii is None:
+            logger.info(
+                "No 'radii_EOS' found in npz — spin correction will not be available. "
+                "Re-run jester_hdf5_to_npz to include radii."
+            )
+        return data["masses_EOS"], data["Lambdas_EOS"], radii
 
     path = Path(config.jester_path)  # type: ignore[arg-type]
     if not path.exists():
@@ -29,7 +40,8 @@ def _load_eos_arrays(config: LambdaConfig) -> tuple[np.ndarray, np.ndarray]:
     logger.info(f"Loading EOS samples from jester result: {path}")
     result = InferenceResult.load(str(path))
     posterior = result.posterior
-    return posterior["masses_EOS"], posterior["Lambdas_EOS"]
+    radii = posterior.get("radii_EOS", None)
+    return posterior["masses_EOS"], posterior["Lambdas_EOS"], radii
 
 
 class EOSLambdaInterpolator:
@@ -47,7 +59,7 @@ class EOSLambdaInterpolator:
     """
 
     def __init__(self, config: LambdaConfig) -> None:
-        masses_raw, lambdas_raw = _load_eos_arrays(config)
+        masses_raw, lambdas_raw, radii_raw = _load_eos_arrays(config)
 
         n_total = len(masses_raw)
         keep = np.ones(n_total, dtype=bool)
@@ -64,6 +76,9 @@ class EOSLambdaInterpolator:
 
         self.masses_EOS: np.ndarray = masses_raw[keep]
         self.lambdas_EOS: np.ndarray = lambdas_raw[keep]
+        self.radii_EOS: np.ndarray | None = (
+            radii_raw[keep] if radii_raw is not None else None
+        )
 
         # Warn about EOS samples with MTOV < 2.0 Msun
         n_low_mtov = sum(m.max() < 2.0 for m in self.masses_EOS)
@@ -79,6 +94,17 @@ class EOSLambdaInterpolator:
     def mtov_array(self) -> np.ndarray:
         """Maximum TOV mass per EOS, shape (n_eos,)."""
         return np.array([m.max() for m in self.masses_EOS])
+
+    @property
+    def rtov_array(self) -> np.ndarray | None:
+        """Radius at the TOV mass per EOS in km, shape (n_eos,).
+
+        Returns ``None`` when ``radii_EOS`` were not available in the EOS
+        source.  Spin-aware mass generation requires this to be not ``None``.
+        """
+        if self.radii_EOS is None:
+            return None
+        return np.array([r[-1] for r in self.radii_EOS])
 
     def interpolate(self, masses: np.ndarray) -> np.ndarray:
         """Compute Lambda values for an array of masses.

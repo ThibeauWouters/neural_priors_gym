@@ -1,8 +1,14 @@
 """Abstract base class for mass generators."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from neural_priors_gym.config.schemas.spin import SpinConfig
 
 
 class MassGenerator(ABC):
@@ -50,3 +56,71 @@ class MassGenerator(ABC):
             Array of shape (n_samples,) containing NS masses below MTOV.
         """
         ...
+
+    def generate_with_spin(
+        self,
+        n_samples: int,
+        mtov_array: np.ndarray,
+        rtov_array: np.ndarray,
+        spin_config: SpinConfig,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Generate mass pairs with spin-corrected upper mass limit.
+
+        The spin is sampled uniformly in ``[spin_min, min(spin_max, chi_max)]``
+        where ``chi_max`` is the physical maximum spin for the drawn EOS.  The
+        effective maximum mass is computed via the universal relation and used
+        as the upper bound for the spinning NS.
+
+        Parameters
+        ----------
+        n_samples:
+            Number of samples to generate.
+        mtov_array:
+            Maximum TOV mass per EOS, shape (n_eos,).
+        rtov_array:
+            Radius at the TOV mass per EOS in km, shape (n_eos,).
+        spin_config:
+            Spin prior configuration (``parameter_name``, ``spin_min``,
+            ``spin_max``).
+
+        Returns
+        -------
+        masses : np.ndarray
+            Shape (n_samples, 2).
+        spins : np.ndarray
+            Shape (n_samples,).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement generate_with_spin()."
+        )
+
+    def generate_ns_mass_with_spin(
+        self,
+        n_samples: int,
+        mtov_array: np.ndarray,
+        rtov_array: np.ndarray,
+        spin_config: SpinConfig,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Generate single NS masses with spin-corrected upper bound for NSBH.
+
+        Parameters
+        ----------
+        n_samples:
+            Number of NS masses to generate.
+        mtov_array:
+            Maximum TOV mass per EOS, shape (n_eos,).
+        rtov_array:
+            Radius at the TOV mass per EOS in km, shape (n_eos,).
+        spin_config:
+            Spin prior configuration.
+
+        Returns
+        -------
+        masses : np.ndarray
+            Shape (n_samples,).
+        spins : np.ndarray
+            Shape (n_samples,).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement generate_ns_mass_with_spin()."
+        )
