@@ -1,0 +1,66 @@
+# Example config for training a neural prior on BNS source-frame masses
+# sampled from a detector-frame chirp mass / mass ratio / redshift prior.
+#
+# Chirp mass and mass ratio are drawn uniformly in component mass (via
+# bilby's UniformInComponentsChirpMass and UniformInComponentsMassRatio),
+# and redshift is drawn independently from a bilby cosmological prior.
+# The resulting detector-frame component masses are converted to source
+# frame via mass_source = mass / (1 + z), so redshift becomes a genuine
+# fifth dimension of the trained space (mass_1_source, mass_2_source,
+# redshift, lambda_1, lambda_2) instead of the usual 4D mass/Lambda space.
+#
+# Usage: train_neural_prior config.yaml
+
+output_dir: ./outdir
+
+source_type: bns
+
+masses:
+  type: chirp_mass_q_redshift
+  mc_min: 1.0        # detector-frame chirp mass lower bound [Msun]
+  mc_max: 2.1         # detector-frame chirp mass upper bound [Msun]
+  q_min: 0.5          # mass ratio q = m2/m1 <= 1 lower bound
+  q_max: 1.0
+  z_min: 0.001        # redshift lower bound
+  z_max: 0.2          # redshift upper bound
+  redshift_prior: uniform_source_frame  # or uniform_comoving_volume
+  cosmology: Planck15 # any astropy cosmology name; omit for bilby default
+
+lambdas:
+  # Point this to your EOS npz file (must contain masses_EOS and Lambdas_EOS)
+  eos_path: ../../jester/examples/inference/smc_random_walk/chiEFT/eos_samples.npz
+
+flow:
+  backend: glasflow
+  flow_type: CouplingNSF
+  n_transforms: 4
+  n_neurons: 256
+  n_blocks_per_transform: 3
+  num_bins: 8
+  tail_bound: 5.0
+  activation: relu
+  linear_transform: none
+  dropout_probability: 0.0
+  batch_norm_within_blocks: false
+  batch_norm_between_transforms: false
+
+training:
+  # 5D space: redshift is an extra trainable dimension on top of the usual
+  # BNS mass/Lambda parameters. Training directly on the detector-frame
+  # chirp_mass and mass_ratio (the quantities actually sampled) is
+  # preferable to chirp_mass_source, since chirp_mass_source = chirp_mass /
+  # (1 + z) entangles chirp_mass and redshift, whereas chirp_mass, mass_ratio,
+  # and redshift are independently drawn.
+  parameter_names:
+    - chirp_mass
+    - mass_ratio
+    - redshift
+    - lambda_1
+    - lambda_2
+  n_samples: 20000
+  num_epochs: 500
+  learning_rate: 0.0001
+  batch_size: 1024
+  max_patience: 100
+  validation_split: 0.2
+  scale_input: true

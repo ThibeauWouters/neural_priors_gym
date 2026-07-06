@@ -13,6 +13,8 @@ from bilby.gw.conversion import (
 from neural_priors_gym.config.schema import TrainingConfig
 from neural_priors_gym.config.schemas.masses import (
     BilbyMassConfig,
+    ChirpMassRatioGaussianRedshiftMassConfig,
+    ChirpMassRatioRedshiftMassConfig,
     DoubleGaussianMassConfig,
     GaussianMassConfig,
     UniformMassConfig,
@@ -20,6 +22,12 @@ from neural_priors_gym.config.schemas.masses import (
 from neural_priors_gym.data.lambdas.interpolator import EOSLambdaInterpolator
 from neural_priors_gym.data.masses.base import MassGenerator
 from neural_priors_gym.data.masses.bilby_prior import BilbyPriorMassGenerator
+from neural_priors_gym.data.masses.chirp_mass_ratio_gaussian_redshift import (
+    ChirpMassRatioGaussianRedshiftMassGenerator,
+)
+from neural_priors_gym.data.masses.chirp_mass_ratio_redshift import (
+    ChirpMassRatioRedshiftMassGenerator,
+)
 from neural_priors_gym.data.masses.double_gaussian import DoubleGaussianMassGenerator
 from neural_priors_gym.data.masses.gaussian import GaussianMassGenerator
 from neural_priors_gym.data.masses.nsbh import NSBHMassGenerator
@@ -78,6 +86,10 @@ def build_mass_generator(config: TrainingConfig) -> MassGenerator:
         ns_gen = DoubleGaussianMassGenerator(mass_config)
     elif isinstance(mass_config, BilbyMassConfig):
         ns_gen = BilbyPriorMassGenerator(mass_config)
+    elif isinstance(mass_config, ChirpMassRatioRedshiftMassConfig):
+        ns_gen = ChirpMassRatioRedshiftMassGenerator(mass_config)
+    elif isinstance(mass_config, ChirpMassRatioGaussianRedshiftMassConfig):
+        ns_gen = ChirpMassRatioGaussianRedshiftMassGenerator(mass_config)
     else:
         raise ValueError(f"Unknown mass config type: {type(mass_config)}")
 
@@ -160,6 +172,7 @@ class TrainingDataGenerator:
         mass_1_source, mass_2_source = masses[:, 0], masses[:, 1]
 
         mass_quantities = _build_mass_quantities(mass_1_source, mass_2_source)
+        mass_quantities.update(self.mass_generator.extra_quantities())
 
         # For NSBH, only pass mass_2_source (NS) to the interpolator.
         if self.source_type == "nsbh":

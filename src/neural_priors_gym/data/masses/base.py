@@ -50,3 +50,13 @@ class MassGenerator(ABC):
             Array of shape (n_samples,) containing NS masses below MTOV.
         """
         ...
+
+    def extra_quantities(self) -> dict[str, np.ndarray]:
+        """Additional per-sample quantities produced by the last generate() call.
+
+        Subclasses that draw quantities beyond mass_1_source/mass_2_source
+        (e.g. redshift) should override this to expose them after generate()
+        has run, so they can be included in the training data and used as
+        trainable parameters. Defaults to no extra quantities.
+        """
+        return {}
