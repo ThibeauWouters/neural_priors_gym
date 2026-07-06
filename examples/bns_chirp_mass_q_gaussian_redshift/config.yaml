@@ -1,0 +1,39 @@
+output_dir: ./outdir
+
+source_type: bns
+
+masses:
+  type: chirp_mass_q_gaussian_redshift
+  mc_min: 1.400         # detector-frame chirp mass lower bound [Msun]
+  mc_max: 1.401         # detector-frame chirp mass upper bound [Msun]
+  q_min: 0.5          # mass ratio q = m2/m1 <= 1 lower bound
+  q_max: 1.0
+  z_mean: 0.02        # known redshift from the EM counterpart/host galaxy
+  z_std: 0.005        # redshift measurement uncertainty
+
+lambdas:
+  eos_path: ../../../jester/examples/inference/smc_random_walk/chiEFT/outdir/eos_samples.npz
+
+flow:
+  backend: zuko
+  flow_type: maf
+  transforms: 4
+  randperm: false
+  hidden_features:
+    - 128
+    - 128
+
+training:
+  parameter_names:
+    - chirp_mass_source
+    - mass_ratio
+    - redshift
+    - lambda_1
+    - lambda_2
+  n_samples: 20000
+  num_epochs: 1000
+  learning_rate: 0.001
+  batch_size: 1024
+  max_patience: 100
+  validation_split: 0.2
+  scale_input: true
