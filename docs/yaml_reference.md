@@ -471,8 +471,12 @@ training:
   training and validation sets to avoid data leakage.
 - **`scale_input`** (`bool`, default: `true`) — When `true`, a ``MinMaxScaler``
   is fitted on the data and applied before training, mapping each column to
-  `[0, 1]`. The scaler is saved to ``outdir/scaler.gz`` so that flow samples can
-  be back-transformed at evaluation time.
+  `[0, 1]` (or, with `scaler: standard`, to zero mean and unit variance). For
+  every backend the scaler, the log transforms (`log_lambda`, `log_one_minus_q`)
+  and the training-data bounds are written to the `preprocessing` entry of
+  ``model_kwargs.json``, which {mod}`neural_priors_gym.preprocessing` and the
+  bilby prior use to evaluate the flow in physical units. The torch backends
+  also keep writing the pickled scaler to ``scaler.gz`` for older readers.
 - **`log_every_n_epochs`** (`int`, default: `100`) — Interval (in epochs) at
   which the training and validation NLL are logged.
 

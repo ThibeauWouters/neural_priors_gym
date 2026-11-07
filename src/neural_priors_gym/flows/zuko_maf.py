@@ -116,7 +116,7 @@ class ZukoMAF(FlowBase):
             "hidden_features": self.config.hidden_features,
         }
         with open(directory / MODEL_KWARGS_FILE, "w") as f:
-            json.dump(kwargs, f, indent=4)
+            json.dump(self._add_preprocessing(kwargs), f, indent=4)
 
         logger.info(f"Flow saved to {directory}")
 
@@ -143,5 +143,6 @@ class ZukoMAF(FlowBase):
             torch.load(directory / MODEL_WEIGHTS_FILE, map_location=DEVICE)
         )
         instance._flow.eval()
+        instance.preprocessing = kwargs.get("preprocessing")
         logger.info(f"Flow loaded from {directory}")
         return instance

@@ -145,7 +145,7 @@ class GlasflowNSF(FlowBase):
             "batch_norm_between_transforms": self.config.batch_norm_between_transforms,
         }
         with open(directory / MODEL_KWARGS_FILE, "w") as f:
-            json.dump(kwargs, f, indent=4)
+            json.dump(self._add_preprocessing(kwargs), f, indent=4)
 
         logger.info(f"Flow saved to {directory}")
 
@@ -182,5 +182,6 @@ class GlasflowNSF(FlowBase):
         weights_path = directory / MODEL_WEIGHTS_FILE
         instance._flow.load_state_dict(torch.load(weights_path, map_location=DEVICE))
         instance._flow.eval()
+        instance.preprocessing = kwargs.get("preprocessing")
         logger.info(f"Flow loaded from {directory}")
         return instance

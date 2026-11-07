@@ -10,6 +10,7 @@ from neural_priors_gym.config.schema import TrainingConfig
 from neural_priors_gym.data.generator import TrainingDataGenerator
 from neural_priors_gym.evaluation.bounds import check_out_of_bounds
 from neural_priors_gym.evaluation.metrics import compute_jsd
+from neural_priors_gym.preprocessing import flow_to_physical
 from neural_priors_gym.logging_config import get_logger
 from neural_priors_gym.plotting.plots import (
     plot_corner,
@@ -99,10 +100,11 @@ def main(config: TrainingConfig) -> None:
     n_eval = min(10_000, len(x_data))
     flow_samples = flow.sample(n_eval)
 
-    if scaler is not None:
-        flow_samples_original = scaler.inverse_transform(flow_samples)
-    else:
-        flow_samples_original = flow_samples
+    # The trainer always sets the record, so this undoes the scaler and any log transforms.
+    pre = flow.preprocessing
+    flow_samples_original = (
+        flow_samples if pre is None else flow_to_physical(flow_samples, pre)
+    )
 
     jsd_results = compute_jsd(x_data[:n_eval], flow_samples_original)
     jsd_per_dim = [

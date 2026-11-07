@@ -16,6 +16,7 @@ from neural_priors_gym.config.schemas.flow import (
 )
 from neural_priors_gym.flows.base import FlowBase
 from neural_priors_gym.logging_config import get_logger
+from neural_priors_gym.preprocessing import make_preprocessing_record
 
 logger = get_logger("neural_priors_gym.training")
 
@@ -129,23 +130,20 @@ class FlowTrainer:
                 joblib.dump(scaler, save_dir / SCALER_FILE)
                 logger.info(f"{type(scaler).__name__} saved to {save_dir / SCALER_FILE}")
 
-        if hasattr(flow, "preprocessing"):
-            # Backends that store their own preprocessing (flowjax) get the
-            # scaler's affine parameters, the log transform and the bounds
-            # of the raw training data, so that saved models need no pickle.
-            raw = np.column_stack([raw_data[name] for name in parameter_names])
-            flow.preprocessing = {  # type: ignore[attr-defined]
-                "parameter_names": list(parameter_names),
-                "scaler": None
-                if scaler is None
-                else _affine(scaler, x_combined),
-                "log_transform": list(lambda_cols) if cfg.log_lambda else [],
-                "log1m_transform": log1m_cols,
-                "bounds": {
-                    "min": raw.min(axis=0).tolist(),
-                    "max": raw.max(axis=0).tolist(),
-                },
-            }
+        # Every backend gets the same backend-independent preprocessing record
+        # (scaler as an affine map, log transforms, raw data bounds). It is
+        # written to model_kwargs.json by flow.save, so that a model can be
+        # evaluated in physical units without the pickled scaler; see
+        # neural_priors_gym.preprocessing.
+        raw = np.column_stack([raw_data[name] for name in parameter_names])
+        flow.preprocessing = make_preprocessing_record(
+            parameter_names=list(parameter_names),
+            scaler=None if scaler is None else _affine(scaler, x_combined),
+            log_transform=list(lambda_cols),
+            log1m_transform=log1m_cols,
+            bounds_min=raw.min(axis=0).tolist(),
+            bounds_max=raw.max(axis=0).tolist(),
+        )
 
         flow.set_optimizer(cfg.learning_rate)
         train_loader, val_loader = flow.make_data_loaders(

@@ -28,7 +28,8 @@ class TrainingHyperparamsConfig(NeuralPriorBaseModel):
         retains raw values.
     log_one_minus_q:
         If ``True``, the flow sees :math:`\\ln(1 - q)` instead of the mass ratio :math:`q`, so the sharp edge of the training data at
-        :math:`q = 1` becomes a smooth tail and the flow cannot put mass at :math:`q > 1`. Only for the flowjax backend.
+        :math:`q = 1` becomes a smooth tail and the flow cannot put mass at :math:`q > 1`. Works for every backend; the
+        transform is recorded in the ``preprocessing`` entry of ``model_kwargs.json`` (see :mod:`neural_priors_gym.preprocessing`).
     scaler:
         ``"minmax"`` (default) rescales each parameter to [0, 1]; ``"standard"`` to zero mean and unit variance. With spline flows
         whose spline interval is ``[-tail_bound, tail_bound]`` (5 by default), min-max data occupy about one of the 8 bins, so the spline

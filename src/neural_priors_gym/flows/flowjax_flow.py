@@ -16,6 +16,7 @@ import paramax
 
 from neural_priors_gym.config.schemas.flow import FlowjaxConfig
 from neural_priors_gym.logging_config import get_logger
+from neural_priors_gym.preprocessing import load_preprocessing
 
 from .base import FlowBase
 from .flowjax_prior import (
@@ -279,7 +280,10 @@ class FlowjaxFlow(FlowBase):
                     "max": [np.inf] * self.n_inputs,
                 },
             }
-        return {**self._architecture(), **pre}
+        # The record is stored twice: at the top level, where make_prior and
+        # older readers expect it, and under "preprocessing" like the other
+        # backends.
+        return {**self._architecture(), **pre, "preprocessing": pre}
 
     def as_prior(self, dtype: Any = None) -> FlowjaxPrior:
         """The current flow as a physical-unit :class:`FlowjaxPrior`."""
@@ -301,7 +305,6 @@ class FlowjaxFlow(FlowBase):
                 if k in meta and k != "backend"
             }
         )
-        pre_keys = ("parameter_names", "scaler", "log_transform", "bounds")
-        preprocessing = {k: meta.get(k) for k in pre_keys}
+        preprocessing = load_preprocessing(directory)
         logger.info(f"Flow loaded from {directory}")
         return cls(flow, meta["n_inputs"], config, preprocessing)

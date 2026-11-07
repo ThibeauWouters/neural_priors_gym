@@ -40,6 +40,13 @@ class FlowBase(ABC):
     #: (flowjax) set this to ``False``.
     uses_pickled_scaler: bool = True
 
+    #: Backend-independent preprocessing record (see
+    #: :mod:`neural_priors_gym.preprocessing`), set by the trainer and saved
+    #: under the ``"preprocessing"`` key of ``model_kwargs.json``. ``None`` for
+    #: flows built outside the trainer and for models saved before the record
+    #: existed.
+    preprocessing: dict[str, Any] | None = None
+
     def make_data_loaders(
         self, x_train: np.ndarray, x_val: np.ndarray, batch_size: int
     ) -> tuple[Any, Any]:
@@ -199,6 +206,14 @@ class FlowBase(ABC):
         )
         return flow_cls.load(directory)
 
+    def _add_preprocessing(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Add the preprocessing record to the ``model_kwargs.json`` contents."""
+        if self.preprocessing is not None:
+            from neural_priors_gym.preprocessing import PREPROCESSING_KEY
+
+            kwargs[PREPROCESSING_KEY] = self.preprocessing
+        return kwargs
+
     @staticmethod
     def compute_log_jacobian_correction(scaler) -> float:
         r"""Compute the log-determinant Jacobian correction for a MinMaxScaler.
@@ -213,7 +228,9 @@ class FlowBase(ABC):
 
         This correction must be added to the flow log-probability when the flow
         was trained on scaled data and the log-prob is evaluated in the original
-        (unscaled) parameter space.
+        (unscaled) parameter space. It is only valid for a min-max scaler and no
+        log transforms; for general preprocessing use
+        :func:`neural_priors_gym.preprocessing.physical_log_prob`.
 
         Parameters
         ----------
