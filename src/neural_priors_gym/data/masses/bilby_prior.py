@@ -29,8 +29,12 @@ class BilbyPriorMassGenerator(MassGenerator):
         self.prior_file = str(prior_file)
 
     def generate(
-        self, n_samples: int, mtov_array: np.ndarray
-    ) -> np.ndarray:  # noqa: ARG002
+        self,
+        n_samples: int,
+        mtov_array: np.ndarray,  # noqa: ARG002
+        eos_indices: np.ndarray | None = None,  # noqa: ARG002
+    ) -> np.ndarray:
+        """Draw masses from the prior file; MTOV and the EOS are not used."""
         import bilby
         from bilby.gw.conversion import generate_all_bns_parameters
 
@@ -59,7 +63,10 @@ class BilbyPriorMassGenerator(MassGenerator):
         return np.column_stack([m1_out, m2_out])
 
     def generate_ns_mass(
-        self, n_samples: int, mtov_array: np.ndarray
-    ) -> np.ndarray:  # noqa: ARG002
+        self,
+        n_samples: int,
+        mtov_array: np.ndarray,
+        eos_indices: np.ndarray | None = None,  # noqa: ARG002
+    ) -> np.ndarray:
         """Return the secondary (NS) masses from the bilby prior for NSBH use."""
         return self.generate(n_samples, mtov_array)[:, 1]

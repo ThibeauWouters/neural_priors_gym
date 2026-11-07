@@ -154,8 +154,12 @@ class TrainingDataGenerator:
         """
         logger.info(f"Generating {self.n_samples} training samples ...")
 
+        # One EOS per sample: it sets MTOV for the masses and Lambda(m).
+        eos_indices = np.random.randint(
+            0, self.lambda_interpolator.n_eos, size=self.n_samples
+        )
         masses = self.mass_generator.generate(
-            self.n_samples, self.lambda_interpolator.mtov_array
+            self.n_samples, self.lambda_interpolator.mtov_array, eos_indices
         )
         mass_1_source, mass_2_source = masses[:, 0], masses[:, 1]
 
@@ -167,7 +171,7 @@ class TrainingDataGenerator:
         else:
             lambda_masses = masses
 
-        lambdas = self.lambda_interpolator.interpolate(lambda_masses)
+        lambdas = self.lambda_interpolator.interpolate(lambda_masses, eos_indices)
 
         if self.source_type == "bns":
             lambda_quantities: dict[str, np.ndarray] = _build_lambda_quantities(

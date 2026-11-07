@@ -42,6 +42,7 @@ dependencies = [
     "tqdm",
     "astropy>=7.2.0",
     "zuko",
+    "h5py",
     "jestertov @ git+https://github.com/nuclear-multimessenger-astronomy/jester.git@main",
 ]
 

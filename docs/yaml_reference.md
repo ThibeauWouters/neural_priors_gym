@@ -206,9 +206,11 @@ masses:
 ## Lambda (tidal deformability) configuration
 
 The `lambdas` section configures how tidal deformabilities are interpolated from
-a set of EOS samples. For each training sample, a random EOS is drawn from the
-provided file and $\Lambda(M)$ is evaluated at the sampled mass by linear
-interpolation.
+a set of EOS samples. For each training sample, one EOS is drawn at random from
+the provided file. Its maximum mass $M_{\rm TOV}$ bounds the sampled NS masses
+(and is the lower bound of the BH mass for NSBH systems), and its $\Lambda(M)$
+curve is evaluated at the sampled masses by linear interpolation, so masses and
+tidal deformabilities of a sample always come from the same EOS.
 
 Exactly one of `eos_path` or `jester_path` must be set; they are mutually
 exclusive.
@@ -234,12 +236,17 @@ lambdas:
   since the black hole contributes no tidal deformability.
 - **`eos_path`** (`str | null`, default: `null`) — Path to a NumPy `.npz` archive
   containing the arrays `masses_EOS` and `Lambdas_EOS`, each of shape
-  `(n_eos, n_mass_points)`. EOS samples with any negative $\Lambda$ values are
-  automatically removed at load time. Mutually exclusive with `jester_path`.
+  `(n_eos, n_mass_points)`. EOS samples with non-finite or non-positive
+  $\Lambda$ values, or with a mass grid that is not increasing, are removed at
+  load time, and any points beyond the maximum mass (an unstable branch) are
+  cut off. Mutually exclusive with `jester_path`.
 - **`jester_path`** (`str | null`, default: `null`) — Path to a
   [jester](https://github.com/nuclear-multimessenger-astronomy/jester) inference
-  result `.h5` file. The posterior must contain `masses_EOS` and `Lambdas_EOS`
-  arrays. Mutually exclusive with `eos_path`.
+  result `.h5` file. The arrays `masses_EOS` and `Lambdas_EOS` are read from the
+  group `posterior/derived_eos` with h5py, so jester itself is not needed. The
+  same filtering as for `eos_path` applies; this removes the all-zero rows that
+  jester writes for EOS whose TOV solve failed. Mutually exclusive with
+  `eos_path`.
 - **`log_lambda`** (`bool`, default: `false`) — When `true`, a natural-log
   transform is applied to all Lambda columns before the scaler and flow see the
   data. The raw (untransformed) values are always written to `training_data.npz`;

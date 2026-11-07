@@ -21,10 +21,4 @@
 
    
    
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~NSBHMassGenerator.parameter_names
-   
    

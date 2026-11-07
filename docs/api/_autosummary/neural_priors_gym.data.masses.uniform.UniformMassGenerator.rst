@@ -21,10 +21,4 @@
 
    
    
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~UniformMassGenerator.parameter_names
-   
    

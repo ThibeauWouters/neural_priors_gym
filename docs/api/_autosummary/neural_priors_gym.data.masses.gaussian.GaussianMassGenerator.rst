@@ -21,10 +21,4 @@
 
    
    
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~GaussianMassGenerator.parameter_names
-   
    

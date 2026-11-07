@@ -59,6 +59,17 @@ def load_config(config_path: Union[str, Path]) -> TrainingConfig:
         if not eos_path.is_absolute():
             config_dict["lambdas"]["eos_path"] = str((config_dir / eos_path).resolve())
 
+    if (
+        "lambdas" in config_dict
+        and isinstance(config_dict["lambdas"], dict)
+        and config_dict["lambdas"].get("jester_path") is not None
+    ):
+        jester_path = Path(config_dict["lambdas"]["jester_path"])
+        if not jester_path.is_absolute():
+            config_dict["lambdas"]["jester_path"] = str(
+                (config_dir / jester_path).resolve()
+            )
+
     if "masses" in config_dict and "prior_file" in config_dict["masses"]:
         prior_file = Path(config_dict["masses"]["prior_file"])
         if not prior_file.is_absolute():

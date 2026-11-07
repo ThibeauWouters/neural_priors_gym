@@ -25,5 +25,6 @@
    .. autosummary::
    
       ~EOSLambdaInterpolator.mtov_array
+      ~EOSLambdaInterpolator.n_eos
    
    

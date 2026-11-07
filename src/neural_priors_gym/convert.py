@@ -6,26 +6,25 @@ from pathlib import Path
 import argparse
 import numpy as np
 
-from jesterTOV.inference.result import InferenceResult
+from neural_priors_gym.data.lambdas.interpolator import load_jester_eos
 
 
 def convert(input_path: Path, output_path: Path) -> None:
     """Convert a jester HDF5 result file to an EOS npz file.
 
-    Extracts ``masses_EOS`` and ``Lambdas_EOS`` arrays from the posterior and
-    saves them as a NumPy archive. The output is a lightweight file suitable for
-    use with :class:`~neural_priors_gym.data.lambdas.interpolator.EOSLambdaInterpolator`.
+    Extracts ``masses_EOS`` and ``Lambdas_EOS`` from the
+    ``posterior/derived_eos`` group (read with h5py, so jester is not needed)
+    and saves them unchanged as a NumPy archive. Invalid EOS (e.g. the
+    all-zero rows jester writes for failed TOV solves) are kept here and
+    removed when the file is loaded by the interpolator. The output can be used
+    with :class:`~neural_priors_gym.data.lambdas.interpolator.EOSLambdaInterpolator`.
 
     Args:
         input_path: Path to the jester ``results.h5`` file.
         output_path: Destination path for the output ``.npz`` file.
     """
     print(f"Loading jester result from {input_path} ...")
-    result = InferenceResult.load(str(input_path))
-
-    posterior = result.posterior
-    masses_EOS: np.ndarray = posterior["masses_EOS"]
-    Lambdas_EOS: np.ndarray = posterior["Lambdas_EOS"]
+    masses_EOS, Lambdas_EOS = load_jester_eos(input_path)
 
     print(f"Found {len(masses_EOS)} EOS samples.")
     np.savez(output_path, masses_EOS=masses_EOS, Lambdas_EOS=Lambdas_EOS)

@@ -1,0 +1,47 @@
+# Neural prior of arXiv:2511.22987: BNS, uniform NS mass model.
+# Same training settings as the paper (200 000 samples, 80/20 split, coupling
+# NSF with 4 layers of width 256 and depth 3, Adam lr 1e-4, batch 1024, at
+# most 2000 epochs, early stopping after 250 epochs without improvement),
+# trained with the flowjax backend so the result can be used as a JAX prior.
+#
+# Usage: train_neural_prior config.yaml
+
+output_dir: ./outdir
+
+source_type: bns
+
+masses:
+  type: uniform
+  m_min: 1.0              # NS masses uniform in [1, M_TOV] of each sample's EOS
+
+lambdas:
+  # Placeholder: a jester results.h5 (posterior/derived_eos/{masses_EOS,
+  # Lambdas_EOS}), or use eos_path: with an npz from jester_hdf5_to_npz.
+  jester_path: /path/to/jester/outdir/results.h5
+
+flow:
+  backend: flowjax
+  flow_type: coupling_nsf
+  n_transforms: 4
+  nn_width: 256
+  nn_depth: 3
+  num_bins: 8
+  tail_bound: 5.0
+  activation: relu
+  dtype: float32
+  seed: 0
+
+training:
+  parameter_names:
+    - chirp_mass_source
+    - mass_ratio
+    - lambda_1
+    - lambda_2
+  n_samples: 200000
+  validation_split: 0.2
+  num_epochs: 2000
+  learning_rate: 0.0001
+  batch_size: 1024
+  max_patience: 250
+  scale_input: true
+  log_lambda: false

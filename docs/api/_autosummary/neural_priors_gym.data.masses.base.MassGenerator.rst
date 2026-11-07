@@ -21,10 +21,4 @@
 
    
    
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~MassGenerator.parameter_names
-   
    

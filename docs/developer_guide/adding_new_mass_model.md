@@ -62,17 +62,21 @@ Create `src/neural_priors_gym/data/masses/power_law.py`. Your class must
 subclass {class}`~neural_priors_gym.data.masses.base.MassGenerator` and implement
 two abstract methods:
 
-- `generate(n_samples, mtov_array)` — produces `(m1, m2)` pairs for a BNS
+- `generate(n_samples, mtov_array, eos_indices=None)` — produces `(m1, m2)` pairs for a BNS
   system. Both masses come from your distribution. By convention, the returned
   array has shape `(n_samples, 2)` with `mass_1_source >= mass_2_source`.
-- `generate_ns_mass(n_samples, mtov_array)` — produces a single NS mass per
+- `generate_ns_mass(n_samples, mtov_array, eos_indices=None)` — produces a single NS mass per
   sample. This is called by `NSBHMassGenerator` when your model is used as the
   NS population in an NSBH run (see below).
 
 In both methods, `mtov_array` is a 1-D array of length `n_eos` containing the
-maximum TOV mass for each EOS sample in the dataset. Draw one EOS index at
-random per sample and use its MTOV as the upper bound on the NS mass, so that
-the generated masses are always physically consistent with the EOS.
+maximum TOV mass for each EOS sample in the dataset, and `eos_indices` gives
+the EOS of each sample. The data generator draws these indices once and passes
+the same ones to the Lambda interpolator, so that the masses and tidal
+deformabilities of a sample come from the same EOS. Use the MTOV of each
+sample's EOS as the upper bound on the NS mass; the helper
+`neural_priors_gym.data.masses.base.mtov_per_sample` returns it and draws
+random indices when `eos_indices` is `None`.
 
 ```python
 """Power-law mass generator."""
@@ -81,7 +85,7 @@ import numpy as np
 
 from neural_priors_gym.config.schemas.masses import PowerLawMassConfig
 
-from .base import MassGenerator
+from .base import MassGenerator, mtov_per_sample as get_mtov
 
 
 class PowerLawMassGenerator(MassGenerator):
@@ -101,9 +105,10 @@ class PowerLawMassGenerator(MassGenerator):
         exp = alpha + 1.0
         return (a**exp + u * (b**exp - a**exp)) ** (1.0 / exp)
 
-    def generate(self, n_samples: int, mtov_array: np.ndarray) -> np.ndarray:
-        eos_indices = np.random.randint(0, len(mtov_array), size=n_samples)
-        mtov_per_sample = mtov_array[eos_indices]
+    def generate(
+        self, n_samples: int, mtov_array: np.ndarray, eos_indices=None
+    ) -> np.ndarray:
+        mtov_per_sample = get_mtov(n_samples, mtov_array, eos_indices)
 
         m_a = self._sample_power_law(n_samples, mtov_per_sample)
         m_b = self._sample_power_law(n_samples, mtov_per_sample)
@@ -112,9 +117,10 @@ class PowerLawMassGenerator(MassGenerator):
         m2 = np.minimum(m_a, m_b)
         return np.column_stack([m1, m2])
 
-    def generate_ns_mass(self, n_samples: int, mtov_array: np.ndarray) -> np.ndarray:
-        eos_indices = np.random.randint(0, len(mtov_array), size=n_samples)
-        mtov_per_sample = mtov_array[eos_indices]
+    def generate_ns_mass(
+        self, n_samples: int, mtov_array: np.ndarray, eos_indices=None
+    ) -> np.ndarray:
+        mtov_per_sample = get_mtov(n_samples, mtov_array, eos_indices)
         return self._sample_power_law(n_samples, mtov_per_sample)
 ```
 
@@ -212,7 +218,7 @@ import numpy as np
 
 from neural_priors_gym.config.schemas.masses import NSBHPowerLawConfig
 
-from .base import MassGenerator
+from .base import MassGenerator, mtov_per_sample as get_mtov
 
 
 class NSBHPowerLawMassGenerator(MassGenerator):
@@ -237,9 +243,10 @@ class NSBHPowerLawMassGenerator(MassGenerator):
         exp = alpha + 1.0
         return (lo**exp + u * (hi**exp - lo**exp)) ** (1.0 / exp)
 
-    def generate(self, n_samples: int, mtov_array: np.ndarray) -> np.ndarray:
-        eos_indices = np.random.randint(0, len(mtov_array), size=n_samples)
-        mtov_per_sample = mtov_array[eos_indices]
+    def generate(
+        self, n_samples: int, mtov_array: np.ndarray, eos_indices=None
+    ) -> np.ndarray:
+        mtov_per_sample = get_mtov(n_samples, mtov_array, eos_indices)
 
         if np.any(mtov_per_sample >= self.m_max_bh):
             raise ValueError(
@@ -255,9 +262,10 @@ class NSBHPowerLawMassGenerator(MassGenerator):
 
         return np.column_stack([m1, m2])
 
-    def generate_ns_mass(self, n_samples: int, mtov_array: np.ndarray) -> np.ndarray:
-        eos_indices = np.random.randint(0, len(mtov_array), size=n_samples)
-        mtov_per_sample = mtov_array[eos_indices]
+    def generate_ns_mass(
+        self, n_samples: int, mtov_array: np.ndarray, eos_indices=None
+    ) -> np.ndarray:
+        mtov_per_sample = get_mtov(n_samples, mtov_array, eos_indices)
         u = np.random.uniform(0.0, 1.0, n_samples)
         return self.m_min_ns + u * (mtov_per_sample - self.m_min_ns)
 ```
