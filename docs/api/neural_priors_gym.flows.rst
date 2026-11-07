@@ -42,3 +42,24 @@ Zuko MAF backend
    :toctree: _autosummary/
 
    ZukoMAF
+
+flowjax backend
+---------------
+
+.. currentmodule:: neural_priors_gym.flows.flowjax_flow
+
+.. autosummary::
+   :nosignatures:
+   :toctree: _autosummary/
+
+   FlowjaxFlow
+
+.. currentmodule:: neural_priors_gym.flows.flowjax_prior
+
+.. autosummary::
+   :nosignatures:
+   :toctree: _autosummary/
+
+   FlowjaxPrior
+   load_flowjax_prior
+   build_flowjax_flow

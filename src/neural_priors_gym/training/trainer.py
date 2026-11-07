@@ -1,26 +1,25 @@
 """Flow trainer: handles the training loop, early stopping, and scaling."""
 
-import copy
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import joblib
 import numpy as np
-import torch
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, TensorDataset
 
 from neural_priors_gym.config.schema import TrainingConfig
-from neural_priors_gym.config.schemas.flow import GlasflowConfig, ZukoMAFConfig
+from neural_priors_gym.config.schemas.flow import (
+    FlowjaxConfig,
+    GlasflowConfig,
+    ZukoMAFConfig,
+)
 from neural_priors_gym.flows.base import FlowBase
-from neural_priors_gym.flows.glasflow import GlasflowNSF
 from neural_priors_gym.logging_config import get_logger
 
 logger = get_logger("neural_priors_gym.training")
 
 SCALER_FILE = "scaler.gz"
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class FlowTrainer:
@@ -41,11 +40,17 @@ class FlowTrainer:
         """Construct a flow from the config."""
         flow_config = self.config.flow
         if isinstance(flow_config, GlasflowConfig):
+            from neural_priors_gym.flows.glasflow import GlasflowNSF
+
             return GlasflowNSF.from_config(flow_config, n_inputs)
         if isinstance(flow_config, ZukoMAFConfig):
             from neural_priors_gym.flows.zuko_maf import ZukoMAF
 
             return ZukoMAF.from_config(flow_config, n_inputs)
+        if isinstance(flow_config, FlowjaxConfig):
+            from neural_priors_gym.flows.flowjax_flow import FlowjaxFlow
+
+            return FlowjaxFlow.from_config(flow_config, n_inputs)
         raise ValueError(f"Unknown flow config type: {type(flow_config)}")
 
     def train(
@@ -85,6 +90,8 @@ class FlowTrainer:
         # The saved training_data.npz retains raw values; this transform is
         # only visible to the flow and scaler.
         _LAMBDA_NAMES = {"lambda_1", "lambda_2", "lambda_tilde", "delta_lambda_tilde"}
+        raw_data = data
+        lambda_cols: list[str] = []
         if cfg.log_lambda:
             data = dict(data)
             lambda_cols = [n for n in parameter_names if n in _LAMBDA_NAMES]
@@ -94,6 +101,7 @@ class FlowTrainer:
 
         x_full = np.column_stack([data[name] for name in parameter_names])
         n_inputs = x_full.shape[1]
+        flow = self.build_flow(n_inputs)
 
         x_train, x_val = train_test_split(
             x_full,
@@ -108,24 +116,40 @@ class FlowTrainer:
             scaler.fit(x_combined)
             x_train = scaler.transform(x_train)
             x_val = scaler.transform(x_val)
-            joblib.dump(scaler, save_dir / SCALER_FILE)
-            logger.info(f"MinMaxScaler saved to {save_dir / SCALER_FILE}")
+            if flow.uses_pickled_scaler:
+                joblib.dump(scaler, save_dir / SCALER_FILE)
+                logger.info(f"MinMaxScaler saved to {save_dir / SCALER_FILE}")
 
-        flow = self.build_flow(n_inputs)
+        if hasattr(flow, "preprocessing"):
+            # Backends that store their own preprocessing (flowjax) get the
+            # scaler's affine parameters, the log transform and the bounds
+            # of the raw training data, so that saved models need no pickle.
+            raw = np.column_stack([raw_data[name] for name in parameter_names])
+            flow.preprocessing = {  # type: ignore[attr-defined]
+                "parameter_names": list(parameter_names),
+                "scaler": None
+                if scaler is None
+                else {
+                    "min": scaler.min_.tolist(),
+                    "scale": scaler.scale_.tolist(),
+                    "data_min": scaler.data_min_.tolist(),
+                    "data_max": scaler.data_max_.tolist(),
+                },
+                "log_transform": list(lambda_cols) if cfg.log_lambda else [],
+                "bounds": {
+                    "min": raw.min(axis=0).tolist(),
+                    "max": raw.max(axis=0).tolist(),
+                },
+            }
+
         flow.set_optimizer(cfg.learning_rate)
-
-        train_tensor = torch.tensor(x_train, dtype=torch.float32)
-        val_tensor = torch.tensor(x_val, dtype=torch.float32)
-        train_loader = DataLoader(
-            TensorDataset(train_tensor), batch_size=cfg.batch_size, shuffle=True
-        )
-        val_loader = DataLoader(
-            TensorDataset(val_tensor), batch_size=cfg.batch_size, shuffle=False
+        train_loader, val_loader = flow.make_data_loaders(
+            np.asarray(x_train), np.asarray(x_val), cfg.batch_size
         )
 
         best_val_loss = float("inf")
         patience_counter = 0
-        best_state: dict = {}
+        best_state: Any = None
         train_losses: list[float] = []
         val_losses: list[float] = []
 
@@ -138,7 +162,7 @@ class FlowTrainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
-                best_state = copy.deepcopy(flow._flow.state_dict())  # type: ignore[attr-defined]
+                best_state = flow.get_state()
             else:
                 patience_counter += 1
 
@@ -152,6 +176,7 @@ class FlowTrainer:
                 logger.info(f"Early stopping at epoch {epoch + 1}")
                 break
 
-        flow._flow.load_state_dict(best_state)  # type: ignore[attr-defined]
+        if best_state is not None:
+            flow.set_state(best_state)
         logger.info(f"Training finished. Best validation loss: {best_val_loss:.4f}")
         return flow, train_losses, val_losses, scaler

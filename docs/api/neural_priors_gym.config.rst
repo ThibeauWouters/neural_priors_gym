@@ -68,6 +68,7 @@ Flow configuration schemas
 
    GlasflowConfig
    ZukoMAFConfig
+   FlowjaxConfig
 
 Training hyperparameter schema
 -------------------------------

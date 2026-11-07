@@ -35,6 +35,38 @@ class FlowBase(ABC):
     n_inputs: int
     config: Any
 
+    #: Whether the trainer should pickle the fitted ``MinMaxScaler`` next to
+    #: the model (``scaler.gz``). Backends that store the scaler themselves
+    #: (flowjax) set this to ``False``.
+    uses_pickled_scaler: bool = True
+
+    def make_data_loaders(
+        self, x_train: np.ndarray, x_val: np.ndarray, batch_size: int
+    ) -> tuple[Any, Any]:
+        """Build the training and validation loaders passed to the epoch methods.
+
+        The default returns torch ``DataLoader`` objects (shuffled for training).
+        """
+        import torch
+        from torch.utils.data import DataLoader, TensorDataset
+
+        train = TensorDataset(torch.tensor(x_train, dtype=torch.float32))
+        val = TensorDataset(torch.tensor(x_val, dtype=torch.float32))
+        return (
+            DataLoader(train, batch_size=batch_size, shuffle=True),
+            DataLoader(val, batch_size=batch_size, shuffle=False),
+        )
+
+    def get_state(self) -> Any:
+        """Return a copy of the trainable state, used to keep the best epoch."""
+        import copy
+
+        return copy.deepcopy(self._flow.state_dict())
+
+    def set_state(self, state: Any) -> None:
+        """Restore a state returned by :meth:`get_state`."""
+        self._flow.load_state_dict(state)
+
     @abstractmethod
     def set_optimizer(self, learning_rate: float) -> None:
         """Initialise the optimizer (called by FlowTrainer before training)."""
@@ -122,7 +154,7 @@ class FlowBase(ABC):
         Notes
         -----
         **Adding a new backend**: register the new subclass in the
-        ``_BACKEND_REGISTRY`` dict inside this method.  Failing to do so will
+        ``_BACKEND_MODULES`` dict inside this method.  Failing to do so will
         cause ``load_from_dir`` to raise :exc:`NotImplementedError` for any
         model saved with the new backend.
         """
@@ -142,24 +174,30 @@ class FlowBase(ABC):
 
         # Imported lazily to avoid circular imports at module load time.
         # IMPORTANT: register every new backend class here.
-        from neural_priors_gym.flows.glasflow import GlasflowNSF
-        from neural_priors_gym.flows.zuko_maf import ZukoMAF
-
-        _BACKEND_REGISTRY: dict[str, type["FlowBase"]] = {
-            "glasflow": GlasflowNSF,
-            "zuko": ZukoMAF,
+        _BACKEND_MODULES: dict[str, tuple[str, str]] = {
+            "glasflow": ("neural_priors_gym.flows.glasflow", "GlasflowNSF"),
+            "zuko": ("neural_priors_gym.flows.zuko_maf", "ZukoMAF"),
+            "flowjax": ("neural_priors_gym.flows.flowjax_flow", "FlowjaxFlow"),
         }
 
-        if backend not in _BACKEND_REGISTRY:
+        if backend not in _BACKEND_MODULES:
             raise NotImplementedError(
                 f"Backend '{backend}' is not registered in FlowBase.load_from_dir. "
-                f"Supported backends: {list(_BACKEND_REGISTRY.keys())}. "
-                "To add a new backend, register its class in the _BACKEND_REGISTRY "
+                f"Supported backends: {list(_BACKEND_MODULES.keys())}. "
+                "To add a new backend, register its class in the _BACKEND_MODULES "
                 "dict inside FlowBase.load_from_dir in "
                 "neural_priors_gym/flows/base.py."
             )
 
-        return _BACKEND_REGISTRY[backend].load(directory)
+        # Import only the backend that is needed, so e.g. loading a flowjax
+        # model does not require torch.
+        import importlib
+
+        module_name, class_name = _BACKEND_MODULES[backend]
+        flow_cls: type[FlowBase] = getattr(
+            importlib.import_module(module_name), class_name
+        )
+        return flow_cls.load(directory)
 
     @staticmethod
     def compute_log_jacobian_correction(scaler) -> float:

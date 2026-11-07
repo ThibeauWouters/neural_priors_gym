@@ -8,7 +8,7 @@ from .masses import (
     UniformMassConfig,
 )
 from .lambdas import LambdaConfig
-from .flow import FlowConfig, GlasflowConfig
+from .flow import FlowConfig, FlowjaxConfig, GlasflowConfig, ZukoMAFConfig
 from .training import TrainingHyperparamsConfig
 
 __all__ = [
@@ -20,5 +20,7 @@ __all__ = [
     "LambdaConfig",
     "FlowConfig",
     "GlasflowConfig",
+    "ZukoMAFConfig",
+    "FlowjaxConfig",
     "TrainingHyperparamsConfig",
 ]

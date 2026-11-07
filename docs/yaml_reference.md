@@ -267,7 +267,7 @@ lambdas:
 ## Flow configuration
 
 The `flow` section configures the normalizing flow backend and architecture.
-The `backend` field selects the backend; currently `"glasflow"` and `"zuko"` are supported.
+The `backend` field selects the backend; currently `"glasflow"`, `"zuko"` and `"flowjax"` are supported.
 
 ### Glasflow CouplingNSF
 
@@ -366,6 +366,58 @@ flow:
   layer in the masked MLP that parameterises each autoregressive transform.
   Increasing depth or width raises model capacity at the cost of more parameters
   and slower training.
+
+::::
+
+### flowjax neural spline flow
+
+The flowjax backend trains a rational-quadratic-spline flow in JAX, either with
+coupling layers (`coupling_nsf`, the default) or with masked autoregressive
+layers (`maf_nsf`). It is meant for priors that will be evaluated inside a JAX
+sampler. The defaults follow the glasflow `CouplingNSF` setup of
+arXiv:2511.22987 as closely as flowjax allows; the main difference is that the
+conditioner is a plain MLP with `nn_depth` hidden layers rather than a residual
+network. Training uses the same data split, scaler and early stopping as the
+other backends.
+The Pydantic config schema is {class}`~neural_priors_gym.config.schemas.flow.FlowjaxConfig`.
+
+::::{dropdown} **flowjax configuration**
+
+```yaml
+flow:
+  backend: flowjax               # Required: selects the flowjax backend
+  flow_type: coupling_nsf        # "coupling_nsf" or "maf_nsf"
+  n_transforms: 4                # Number of flow layers
+  nn_width: 256                  # Hidden units per conditioner layer
+  nn_depth: 3                    # Hidden layers per conditioner MLP
+  num_bins: 8                    # Number of spline bins
+  tail_bound: 5.0                # Spline acts on [-tail_bound, tail_bound], identity outside
+  activation: relu               # "relu", "gelu", "silu", "tanh"
+  invert: true                   # flowjax `invert` flag; true makes log_prob a single pass
+  dtype: float32                 # "float32" or "float64" (training precision)
+  seed: 0                        # Seed for initialisation, permutations and shuffling
+```
+
+The model directory contains `model_kwargs.json` and `flowjax_weights.eqx`.
+The JSON file holds the hyperparameters, the parameter names, the affine
+parameters of the scaler, the list of log-transformed parameters, the bounds of
+the training data and the library versions, so no pickled scikit-learn object
+is written. A model can be loaded with only numpy, JAX, equinox and flowjax
+installed, and evaluated in physical units, scaler Jacobian included:
+
+```python
+import jax
+jax.config.update("jax_enable_x64", True)
+from neural_priors_gym.flows.flowjax_prior import load_flowjax_prior
+
+prior = load_flowjax_prior("outdir/model")
+log_p = jax.jit(jax.vmap(prior.log_prob))(x)  # x in physical units, shape (n, n_dim)
+samples = prior.sample(jax.random.key(0), 1000)
+```
+
+The spline parametrisation differs between flowjax major versions, so the
+model must be loaded with the flowjax major version it was trained with; the
+loader raises an error otherwise.
 
 ::::
 
