@@ -14,10 +14,14 @@ logger = get_logger("neural_priors_gym.plotting")
 
 
 def _setup_tex() -> None:
-    """Enable TeX rendering if a TeX installation is found, else disable it."""
+    """Enable TeX rendering if a TeX installation is found, else disable it.
+
+    Set ``NEURAL_PRIORS_GYM_USETEX=0`` to disable it anyway, e.g. on a cluster where ``latex`` exists but lacks packages.
+    """
+    import os
     import shutil
 
-    if shutil.which("latex") is not None:
+    if os.environ.get("NEURAL_PRIORS_GYM_USETEX", "1") != "0" and shutil.which("latex") is not None:
         plt.rcParams.update({"text.usetex": True})
     else:
         plt.rcParams.update({"text.usetex": False})
