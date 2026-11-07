@@ -1,5 +1,7 @@
 """Configuration schema for training hyperparameters."""
 
+from typing import Literal
+
 from ._base import NeuralPriorBaseModel
 
 
@@ -24,6 +26,11 @@ class TrainingHyperparamsConfig(NeuralPriorBaseModel):
         ``lambda_2``, ``lambda_tilde``, ``delta_lambda_tilde``) before
         the flow sees the data. The saved ``training_data.npz`` always
         retains raw values.
+    scaler:
+        ``"minmax"`` (default) rescales each parameter to [0, 1]; ``"standard"`` to zero mean and unit variance. With spline flows
+        whose spline interval is ``[-tail_bound, tail_bound]`` (5 by default), min-max data occupy about one of the 8 bins, so the spline
+        cannot resolve the distribution and the flow can put much of its mass outside the data; ``"standard"`` spreads the data over
+        several bins.
     """
 
     parameter_names: list[str]
@@ -35,5 +42,6 @@ class TrainingHyperparamsConfig(NeuralPriorBaseModel):
     max_patience: int = 250
     validation_split: float = 0.2
     scale_input: bool = True
+    scaler: Literal["minmax", "standard"] = "minmax"
     n_samples: int = 20_000
     log_every_n_epochs: int = 100

@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import joblib
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 
 from neural_priors_gym.config.schema import TrainingConfig
@@ -109,16 +109,16 @@ class FlowTrainer:
             random_state=42,
         )
 
-        scaler: Optional[MinMaxScaler] = None
+        scaler: Optional[MinMaxScaler | StandardScaler] = None
+        x_combined = np.vstack([x_train, x_val])
         if cfg.scale_input:
-            scaler = MinMaxScaler()
-            x_combined = np.vstack([x_train, x_val])
+            scaler = StandardScaler() if cfg.scaler == "standard" else MinMaxScaler()
             scaler.fit(x_combined)
             x_train = scaler.transform(x_train)
             x_val = scaler.transform(x_val)
             if flow.uses_pickled_scaler:
                 joblib.dump(scaler, save_dir / SCALER_FILE)
-                logger.info(f"MinMaxScaler saved to {save_dir / SCALER_FILE}")
+                logger.info(f"{type(scaler).__name__} saved to {save_dir / SCALER_FILE}")
 
         if hasattr(flow, "preprocessing"):
             # Backends that store their own preprocessing (flowjax) get the
@@ -129,12 +129,7 @@ class FlowTrainer:
                 "parameter_names": list(parameter_names),
                 "scaler": None
                 if scaler is None
-                else {
-                    "min": scaler.min_.tolist(),
-                    "scale": scaler.scale_.tolist(),
-                    "data_min": scaler.data_min_.tolist(),
-                    "data_max": scaler.data_max_.tolist(),
-                },
+                else _affine(scaler, x_combined),
                 "log_transform": list(lambda_cols) if cfg.log_lambda else [],
                 "bounds": {
                     "min": raw.min(axis=0).tolist(),
@@ -180,3 +175,14 @@ class FlowTrainer:
             flow.set_state(best_state)
         logger.info(f"Training finished. Best validation loss: {best_val_loss:.4f}")
         return flow, train_losses, val_losses, scaler
+
+
+def _affine(scaler, x_combined: np.ndarray) -> dict:
+    """The scaler as y = x * scale + min, plus the range of the data it was fitted on (MinMaxScaler or StandardScaler)."""
+    if isinstance(scaler, StandardScaler):
+        scale = 1.0 / scaler.scale_
+        shift = -scaler.mean_ * scale
+    else:
+        scale, shift = scaler.scale_, scaler.min_
+    return {"min": np.asarray(shift).tolist(), "scale": np.asarray(scale).tolist(), "data_min": x_combined.min(axis=0).tolist(),
+            "data_max": x_combined.max(axis=0).tolist(), "type": type(scaler).__name__}

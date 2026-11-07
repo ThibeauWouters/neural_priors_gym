@@ -468,3 +468,19 @@ def test_flowjax_major_version_mismatch_raises(gaussian_run, tmp_path: Path) -> 
     (model_dir / "model_kwargs.json").write_text(json.dumps(meta))
     with pytest.raises(RuntimeError, match="flowjax 999.0.0"):
         load_flowjax_prior(model_dir)
+
+
+def test_affine_metadata_matches_both_scalers():
+    """The JSON affine map y = x * scale + min reproduces sklearn's transform for the min-max and the standard scaler."""
+    from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+    from neural_priors_gym.training.trainer import _affine
+
+    rng = np.random.default_rng(0)
+    x = rng.normal([1.2, 0.9, 500.0, 900.0], [0.05, 0.05, 200.0, 400.0], size=(5000, 4))
+    for scaler in (MinMaxScaler(), StandardScaler()):
+        scaler.fit(x)
+        a = _affine(scaler, x)
+        np.testing.assert_allclose(x * np.asarray(a["scale"]) + np.asarray(a["min"]), scaler.transform(x), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(a["data_min"], x.min(axis=0))
+        np.testing.assert_allclose(a["data_max"], x.max(axis=0))
