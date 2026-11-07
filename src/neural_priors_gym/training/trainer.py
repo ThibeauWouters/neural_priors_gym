@@ -98,6 +98,15 @@ class FlowTrainer:
             for name in lambda_cols:
                 data[name] = np.log(data[name])
             logger.info(f"Applied log transform to lambda parameters: {lambda_cols}")
+        log1m_cols: list[str] = []
+        if cfg.log_one_minus_q and "mass_ratio" in parameter_names:
+            data = dict(data)
+            q = np.asarray(data["mass_ratio"], dtype=np.float64)
+            if np.any(q >= 1):
+                raise ValueError("log_one_minus_q needs mass_ratio < 1 in the training data")
+            data["mass_ratio"] = np.log1p(-q)
+            log1m_cols = ["mass_ratio"]
+            logger.info("Applied ln(1 - q) transform to mass_ratio")
 
         x_full = np.column_stack([data[name] for name in parameter_names])
         n_inputs = x_full.shape[1]
@@ -131,6 +140,7 @@ class FlowTrainer:
                 if scaler is None
                 else _affine(scaler, x_combined),
                 "log_transform": list(lambda_cols) if cfg.log_lambda else [],
+                "log1m_transform": log1m_cols,
                 "bounds": {
                     "min": raw.min(axis=0).tolist(),
                     "max": raw.max(axis=0).tolist(),

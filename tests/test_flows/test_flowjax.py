@@ -484,3 +484,27 @@ def test_affine_metadata_matches_both_scalers():
         np.testing.assert_allclose(x * np.asarray(a["scale"]) + np.asarray(a["min"]), scaler.transform(x), rtol=1e-12, atol=1e-12)
         np.testing.assert_allclose(a["data_min"], x.min(axis=0))
         np.testing.assert_allclose(a["data_max"], x.max(axis=0))
+
+
+def test_log_one_minus_q_jacobian_and_round_trip():
+    """ln(1 - q) preprocessing: log_det of physical_to_flow equals the numerical Jacobian, flow_to_physical inverts it, q >= 1 gets -inf."""
+    import jax
+    import jax.numpy as jnp
+
+    from neural_priors_gym.flows.flowjax_prior import build_flowjax_flow, make_prior
+
+    jax.config.update("jax_enable_x64", True)
+    flow = build_flowjax_flow(n_inputs=4, n_transforms=2, nn_width=16, nn_depth=1, seed=0)
+    meta = {"parameter_names": ["chirp_mass_source", "mass_ratio", "lambda_1", "lambda_2"],
+            "scaler": {"min": [-10.0, 2.0, -6.0, -6.5], "scale": [8.0, 0.7, 1.1, 1.0]},
+            "log_transform": ["lambda_1", "lambda_2"], "log1m_transform": ["mass_ratio"],
+            "bounds": {"min": [1.0, 0.5, 10.0, 10.0], "max": [1.4, 0.999, 3000.0, 5000.0]}}
+    prior = make_prior(flow, meta, dtype=jnp.float64)
+    x = jnp.array([1.19, 0.93, 310.0, 520.0])
+    y, log_det = prior.physical_to_flow(x)
+    _, num = jnp.linalg.slogdet(jax.jacfwd(lambda v: prior.physical_to_flow(v)[0])(x))
+    np.testing.assert_allclose(float(log_det), float(num), rtol=1e-10)
+    np.testing.assert_allclose(np.asarray(prior.flow_to_physical(y)), np.asarray(x), rtol=1e-12)
+    assert np.isneginf(float(prior.log_prob(jnp.array([1.19, 1.0, 310.0, 520.0]))))
+    s = np.asarray(prior.sample(jax.random.key(0), 2000))
+    assert np.all(s[:, 1] < 1)

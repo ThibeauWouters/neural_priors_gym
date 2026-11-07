@@ -198,6 +198,8 @@ class FlowjaxPrior(eqx.Module):
         Parameter names, in column order.
     log_mask:
         Per dimension, whether the logarithm is taken before scaling.
+    log1m_mask:
+        Per dimension, whether :math:`\\ln(1 - x)` is taken before scaling (the mass ratio, ``log_one_minus_q``).
     """
 
     flow: Transformed
@@ -206,6 +208,7 @@ class FlowjaxPrior(eqx.Module):
     bounds: jax.Array
     names: tuple[str, ...] = eqx.field(static=True)
     log_mask: tuple[bool, ...] = eqx.field(static=True)
+    log1m_mask: tuple[bool, ...] = eqx.field(static=True, default=())
 
     def __hash__(self) -> int:
         # Equinox hashes modules by their fields, which fails for array
@@ -231,18 +234,25 @@ class FlowjaxPrior(eqx.Module):
         """
         x = jnp.asarray(x, dtype=self.scale.dtype)
         mask = self._log_mask_array()
+        m1 = self._log1m_mask_array()
         safe = jnp.where(mask, x, 1.0)
-        u = jnp.where(mask, jnp.log(safe), x)
+        safe1 = jnp.where(m1, 1.0 - x, 1.0)
+        u = jnp.where(mask, jnp.log(safe), jnp.where(m1, jnp.log(safe1), x))
         y = u * self.scale + self.shift
+        # d ln x / dx = 1/x  ->  -ln x = -u;   d ln(1 - x) / dx = -1/(1 - x)  ->  ln|.| = -ln(1 - x) = -u
         log_det = jnp.sum(jnp.log(self.scale)) - jnp.sum(
-            jnp.where(mask, u, 0.0), axis=-1
+            jnp.where(mask | m1, u, 0.0), axis=-1
         )
         return y, log_det
+
+    def _log1m_mask_array(self) -> jax.Array:
+        m = self.log1m_mask if len(self.log1m_mask) else (False,) * len(self.names)
+        return jnp.asarray(m, dtype=bool)
 
     def flow_to_physical(self, y: jax.Array) -> jax.Array:
         """Map points from the flow's space back to physical units."""
         u = (y - self.shift) / self.scale
-        return jnp.where(self._log_mask_array(), jnp.exp(u), u)
+        return jnp.where(self._log_mask_array(), jnp.exp(u), jnp.where(self._log1m_mask_array(), -jnp.expm1(u), u))
 
     def log_prob(self, x: jax.Array) -> jax.Array:
         """Log density in physical units, including all Jacobian terms.
@@ -254,7 +264,9 @@ class FlowjaxPrior(eqx.Module):
         y, log_det = self.physical_to_flow(x)
         lp = self.flow.log_prob(y) + log_det
         x = jnp.asarray(x, dtype=self.scale.dtype)
-        valid = jnp.all(jnp.where(self._log_mask_array(), x > 0, True), axis=-1)
+        valid = jnp.all(jnp.where(self._log_mask_array(), x > 0, True), axis=-1) & jnp.all(
+            jnp.where(self._log1m_mask_array(), x < 1, True), axis=-1
+        )
         return jnp.where(valid, lp, -jnp.inf)
 
     def sample(self, key: jax.Array, n: int) -> jax.Array:
@@ -295,6 +307,7 @@ def make_prior(
         scale = np.asarray(scaler["scale"], dtype=np.float64)
         shift = np.asarray(scaler["min"], dtype=np.float64)
     log_names = set(metadata.get("log_transform", []))
+    log1m_names = set(metadata.get("log1m_transform", []))
     bounds = np.column_stack(
         [np.asarray(metadata["bounds"]["min"]), np.asarray(metadata["bounds"]["max"])]
     )
@@ -305,6 +318,7 @@ def make_prior(
         bounds=jnp.asarray(bounds, dtype=dtype),
         names=names,
         log_mask=tuple(name in log_names for name in names),
+        log1m_mask=tuple(name in log1m_names for name in names),
     )
 
 

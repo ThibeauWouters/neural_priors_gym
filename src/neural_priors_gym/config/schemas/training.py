@@ -26,6 +26,9 @@ class TrainingHyperparamsConfig(NeuralPriorBaseModel):
         ``lambda_2``, ``lambda_tilde``, ``delta_lambda_tilde``) before
         the flow sees the data. The saved ``training_data.npz`` always
         retains raw values.
+    log_one_minus_q:
+        If ``True``, the flow sees :math:`\\ln(1 - q)` instead of the mass ratio :math:`q`, so the sharp edge of the training data at
+        :math:`q = 1` becomes a smooth tail and the flow cannot put mass at :math:`q > 1`. Only for the flowjax backend.
     scaler:
         ``"minmax"`` (default) rescales each parameter to [0, 1]; ``"standard"`` to zero mean and unit variance. With spline flows
         whose spline interval is ``[-tail_bound, tail_bound]`` (5 by default), min-max data occupy about one of the 8 bins, so the spline
@@ -43,5 +46,6 @@ class TrainingHyperparamsConfig(NeuralPriorBaseModel):
     validation_split: float = 0.2
     scale_input: bool = True
     scaler: Literal["minmax", "standard"] = "minmax"
+    log_one_minus_q: bool = False
     n_samples: int = 20_000
     log_every_n_epochs: int = 100
